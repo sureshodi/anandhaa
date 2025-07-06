@@ -12,7 +12,7 @@ def load_products():
 
 product_dict = load_products()
 
-st.title("🎆 Crackers Wholesale Billing App")
+st.title("🎆 Anandhaa Crackers Wholesale Billing")
 
 # Input table
 if "entries" not in st.session_state:
@@ -30,7 +30,7 @@ with st.form("add_form"):
         else:
             prod = product_dict[code]
             name = prod['Product Name']
-            price = prod['Rate per Pcs']
+            price = prod['Rate']
             amount = price * qty
             st.session_state.entries.append({
                 "code": code,

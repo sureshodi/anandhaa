@@ -11,7 +11,7 @@ if os.path.exists(HEADER_IMG):
 else:
     st.title("🎆 Anandhaa Crackers Wholesale Billing 🎆")
 
-# --- Customer Details Inputs (no need to save)
+# --- Customer Details Inputs ---
 st.subheader("Customer Details")
 customer_name = st.text_input("Customer Name")
 customer_mobile = st.text_input("Customer Mobile")
@@ -75,7 +75,7 @@ if st.session_state.entries:
         with open(txt_file, "w", encoding="utf-8") as f:
             if os.path.exists(HEADER_IMG):
                 f.write(f"[Header Image: {HEADER_IMG}]\n")
-            f.write("Wholesale Crackers Bill\n=======================\n")
+            f.write("SALES ORDER\n=======================\n")
             f.write(f"Customer: {customer_name} | {customer_mobile}\n")
             f.write(f"Address: {customer_address}\n\n")
             for _, row in df.iterrows():
@@ -91,10 +91,13 @@ if st.session_state.entries:
         pdf = FPDF(orientation='P', unit='mm', format='A4')
         pdf.add_page()
         if os.path.exists(HEADER_IMG):
-            pdf.image(HEADER_IMG, x=10, y=8, w=190)
-            pdf.ln(40)
+            # Fit header image within page margins
+            available_w = pdf.w - 20
+            pdf.image(HEADER_IMG, x=10, y=8, w=available_w)
+            pdf.ln(30)
         pdf.set_font("Arial","B",14)
-        pdf.cell(0,10,"Wholesale Crackers Bill",ln=True, align='C')
+        # Change title to SALES ORDER
+        pdf.cell(0,10,"SALES ORDER",ln=True, align='C')
         pdf.ln(5)
         pdf.set_font("Arial",size=10)
         pdf.cell(0,6,f"Customer: {customer_name} | {customer_mobile}",ln=True)

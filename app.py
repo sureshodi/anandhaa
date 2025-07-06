@@ -30,22 +30,24 @@ with st.form("add_form"):
         else:
             prod = product_dict[code]
             name = prod['Product Name']
-            price = prod['Rate']
-            amount = price * qty
+            per_case = prod['Per Case']
+            rate_per_pcs = prod['Rate']
+            amount = rate_per_pcs * qty  # Amount calculated using Rate per Pcs
             st.session_state.entries.append({
                 "code": code,
                 "name": name,
-                "price": price,
+                "per_case": per_case,
                 "qty": qty,
-                "total": amount
+                "rate_per_pcs": rate_per_pcs,
+                "amount": amount
             })
 
 # Show bill items
 if st.session_state.entries:
     st.subheader("🧾 Bill Items")
     df = pd.DataFrame(st.session_state.entries)
-    st.table(df[["code", "name", "price", "qty", "total"]])
-    total_amt = df["total"].sum()
+    st.table(df[["code", "name", "per_case", "qty", "rate_per_pcs", "amount"]])
+    total_amt = df["amount"].sum()
     st.markdown(f"### ✅ Total: ₹{total_amt}")
 
     if st.button("Generate Bill"):
@@ -57,7 +59,7 @@ if st.session_state.entries:
         with open(txt_filename, "w") as f:
             f.write("==== Wholesale Crackers Bill ====\n")
             for e in st.session_state.entries:
-                f.write(f"{e['code']} - {e['name']} - ₹{e['price']} x {e['qty']} = ₹{e['total']}\n")
+                f.write(f"{e['code']} - {e['name']} - Per Case: {e['per_case']} - {e['rate_per_pcs']} x {e['qty']} = ₹{e['amount']}\n")
             f.write(f"\nTOTAL: ₹{total_amt}\n")
 
         # Create PDF
@@ -66,11 +68,12 @@ if st.session_state.entries:
         pdf.set_font("Arial", size=12)
         pdf.cell(200, 10, txt="Wholesale Crackers Bill", ln=True, align='C')
         for e in st.session_state.entries:
-            line = f"{e['code']} - {e['name']} - ₹{e['price']} x {e['qty']} = ₹{e['total']}"
+            line = f"{e['code']} - {e['name']} - Per Case: {e['per_case']} - ₹{e['rate_per_pcs']} x {e['qty']} = ₹{e['amount']}"
             pdf.cell(200, 10, txt=line, ln=True)
         pdf.cell(200, 10, txt=f"TOTAL: ₹{total_amt}", ln=True)
         pdf.output(pdf_filename)
 
+        # Provide download buttons for the generated bill
         with open(txt_filename, "rb") as f:
             st.download_button("⬇️ Download Text Bill", f, txt_filename)
 

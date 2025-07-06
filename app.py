@@ -51,7 +51,7 @@ if st.session_state.entries:
     df.insert(0, "S.No", range(1, len(df) + 1))
     
     # Display only the relevant columns
-    st.table(df[["S.No", "Product Code", "name", "per_case", "qty", "rate", "amount"]])
+    st.table(df[["S.No", "code", "name", "per_case", "qty", "rate", "amount"]])
 
     total_amt = df["amount"].sum()
     st.markdown(f"### ✅ Total: ₹{total_amt}")

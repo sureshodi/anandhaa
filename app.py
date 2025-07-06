@@ -19,7 +19,8 @@ st.title("🎆 Anandhaa Crackers Wholesale Billing")
 if "entries" not in st.session_state:
     st.session_state.entries = []
 
-# Input form to add items\ nwith st.form("add_form"):
+# Input form to add items
+with st.form("add_form"):
     col1, col2 = st.columns(2)
     code = col1.text_input("Enter Product Code").strip().upper()
     qty = col2.number_input("Enter Quantity", min_value=1, step=1)

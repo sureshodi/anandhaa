@@ -4,22 +4,21 @@ from fpdf import FPDF
 import datetime
 import os
 
-# Load products from CSV
+# Load products from CSV with caching\ n@st.cache_data
 def load_products():
     df = pd.read_csv("stock_tracking.csv")
-    # index by Product Code for fast lookup
+    # Create dict indexed by product code for fast lookup
     return df.set_index("Product Code").T.to_dict()
 
-@st.cache_data
-
-
-product_dict = load_products()
+# Initialize product dictionary\ nproduct_dict = load_products()
 
 st.title("🎆 Anandhaa Crackers Wholesale Billing")
 
-# Input form state\if "entries" not in st.session_state:
+# Initialize billing entries in session state
+if "entries" not in st.session_state:
     st.session_state.entries = []
 
+# Entry form
 with st.form("add_form"):
     col1, col2 = st.columns(2)
     code = col1.text_input("Enter Product Code").strip().upper()
@@ -31,40 +30,29 @@ with st.form("add_form"):
             st.error(f"❌ Product code '{code}' not found.")
         else:
             prod = product_dict[code]
+            name = prod['Product Name']
             per_case = prod['Per Case']
-            rate     = prod['Rate']
-            name     = prod['Product Name']
-            amount   = rate * qty
+            rate = prod['Rate']
+            amount = rate * qty
             st.session_state.entries.append({
-                "code": code,
-                "name": name,
-                "per_case": per_case,
-                "qty": qty,
-                "rate": rate,
-                "amount": amount
+                "Product Code": code,
+                "Product Name": name,
+                "Per Case": per_case,
+                "Qty": qty,
+                "Rate": rate,
+                "Amount": amount
             })
 
-# Show bill items
+# Display bill items
 if st.session_state.entries:
     st.subheader("🧾 Bill Items")
     df = pd.DataFrame(st.session_state.entries)
-    # Add S.No column
     df.insert(0, "S.No", range(1, len(df) + 1))
-    
-    # Rename columns for display
-    df = df.rename(columns={
-        "code": "Product Code",
-        "name": "Product Name",
-        "per_case": "Per Case",
-        "qty": "Qty",
-        "rate": "Rate",
-        "amount": "Amount"
-    })
 
-    # Display the table with renamed headers
+    # Display formatted table
     st.table(df[["S.No", "Product Code", "Product Name", "Per Case", "Qty", "Rate", "Amount"]])
 
-    # Calculate total
+    # Total calculation
     total_amt = df["Amount"].sum()
     st.markdown(f"### ✅ Total: ₹{total_amt}")
 
@@ -74,32 +62,33 @@ if st.session_state.entries:
         txt_file = f"bill_{ts}.txt"
         pdf_file = f"bill_{ts}.pdf"
 
-        # Write text bill
+        # Write text file
         with open(txt_file, "w") as f:
-            f.write("==== Wholesale Crackers Bill ====" + "\n")
-            for e in st.session_state.entries:
-                f.write(f"{e['S.No']} - {e['code']} - {e['name']} - Per Case: {e['per_case']} - ₹{e['rate']} x {e['qty']} = ₹{e['amount']}\n")
+            f.write("Wholesale Crackers Bill\n============================\n")
+            for idx, e in df.iterrows():
+                f.write(f"{e['S.No']} {e['Product Code']} {e['Product Name']} Per Case: {e['Per Case']} "
+                        f"₹{e['Rate']} x {e['Qty']} = ₹{e['Amount']}\n")
             f.write(f"\nTOTAL: ₹{total_amt}\n")
 
-        # Create PDF bill
+        # Create PDF
         pdf = FPDF()
         pdf.add_page()
         pdf.set_font("Arial", size=12)
         pdf.cell(200, 10, txt="Wholesale Crackers Bill", ln=True, align='C')
-        for e in st.session_state.entries:
-            line = (f"{e['S.No']} - {e['code']} - {e['name']} - Per Case: {e['per_case']} - "
-                    f"₹{e['rate']} x {e['qty']} = ₹{e['amount']}")
+        for idx, e in df.iterrows():
+            line = (f"{e['S.No']} {e['Product Code']} {e['Product Name']} Per Case: {e['Per Case']} "
+                    f"₹{e['Rate']} x {e['Qty']} = ₹{e['Amount']}")
             pdf.cell(200, 10, txt=line, ln=True)
         pdf.cell(200, 10, txt=f"TOTAL: ₹{total_amt}", ln=True)
         pdf.output(pdf_file)
 
-        # Provide downloads
-        with open(txt_file, "rb") as f:
-            st.download_button("⬇️ Download Text Bill", f, txt_file)
-        with open(pdf_file, "rb") as f:
-            st.download_button("⬇️ Download PDF Bill", f, pdf_file)
+        # Provide download buttons
+        with open(txt_file, "rb") as tf:
+            st.download_button("⬇️ Download Text Bill", tf, txt_file)
+        with open(pdf_file, "rb") as pf:
+            st.download_button("⬇️ Download PDF Bill", pf, pdf_file)
 
-        # Clear entries after generating
+        # Clear entries
         st.session_state.entries = []
 else:
     st.info("Add products to begin billing.")

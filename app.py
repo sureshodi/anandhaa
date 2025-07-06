@@ -25,7 +25,6 @@ with st.form("add_form"):
     col1, col2 = st.columns(2)
     code = col1.text_input("Enter Product Code").strip().upper()
     qty = col2.number_input("Enter Quantity", min_value=1, step=1)
-
     submitted = st.form_submit_button("Add Item")
     if submitted:
         if code not in product_dict:
@@ -47,18 +46,27 @@ if st.session_state.entries:
     df = pd.DataFrame(st.session_state.entries)
     df.insert(0, "S.No", range(1, len(df) + 1))
 
-    # Display the formatted table
-    st.table(df[["S.No", "Product Code", "Product Name", "Per Case", "Qty", "Rate", "Amount"]])
+    # Remove index column by converting to a list of records
+    display_df = df[["S.No", "Product Code", "Product Name", "Per Case", "Qty", "Rate", "Amount"]]
+    st.table(display_df.to_dict(orient='records'))
 
-    # Calculate and display total
-    total_amt = df["Amount"].sum()
-    st.markdown(f"### ✅ Total: ₹{total_amt}")
+    # Calculate Sub Total
+    sub_total = df["Amount"].sum()
+    # Discount input
+    discount = st.number_input("Discount (%)", min_value=0.0, max_value=100.0, step=1.0)
+    # Calculate Total after discount
+    total = sub_total * (1 - discount / 100)
+
+    # Display summary
+    st.markdown(f"**Sub Total:** ₹{sub_total}")
+    st.markdown(f"**Discount:** {discount}%")
+    st.markdown(f"**Total:** ₹{total:.2f}")
 
     # Generate bill files
     if st.button("Generate Bill"):
-        timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-        txt_file = f"bill_{timestamp}.txt"
-        pdf_file = f"bill_{timestamp}.pdf"
+        ts = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+        txt_file = f"bill_{ts}.txt"
+        pdf_file = f"bill_{ts}.pdf"
 
         # Write text bill
         with open(txt_file, "w") as f:
@@ -68,9 +76,11 @@ if st.session_state.entries:
                     f"{row['S.No']} {row['Product Code']} {row['Product Name']} "
                     f"Per Case: {row['Per Case']} ₹{row['Rate']} x {row['Qty']} = ₹{row['Amount']}\n"
                 )
-            f.write(f"\nTOTAL: ₹{total_amt}\n")
+            f.write(f"\nSub Total: ₹{sub_total}\n")
+            f.write(f"Discount: {discount}%\n")
+            f.write(f"Total: ₹{total:.2f}\n")
 
-        # Create PDF
+        # Create PDF bill
         pdf = FPDF()
         pdf.add_page()
         pdf.set_font("Arial", size=12)
@@ -81,7 +91,9 @@ if st.session_state.entries:
                 f"Per Case: {row['Per Case']} ₹{row['Rate']} x {row['Qty']} = ₹{row['Amount']}"
             )
             pdf.cell(200, 10, txt=line, ln=True)
-        pdf.cell(200, 10, txt=f"TOTAL: ₹{total_amt}", ln=True)
+        pdf.cell(200, 10, txt=f"Sub Total: ₹{sub_total}", ln=True)
+        pdf.cell(200, 10, txt=f"Discount: {discount}%", ln=True)
+        pdf.cell(200, 10, txt=f"Total: ₹{total:.2f}", ln=True)
         pdf.output(pdf_file)
 
         # Download buttons

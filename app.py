@@ -47,7 +47,7 @@ if st.session_state.entries:
 
     # Select and display columns without default index
     display_df = df[["S.No", "Product Code", "Product Name", "Per Case", "Qty", "Rate", "Amount"]]
-    st.table(display_df.to_dict(orient='records'))
+    st.dataframe(display_df, hide_index=True)
 
     # Summary calculations
     sub_total = df["Amount"].sum()

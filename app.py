@@ -4,6 +4,13 @@ from fpdf import FPDF
 import datetime
 import os
 
+# load from secrets
+HEADER_IMG = st.secrets["shop"]["logo"]
+
+# show the image full-width
+st.image(HEADER_IMG, use_column_width=True)
+
+
 # Cache and load products
 @st.cache_data
 def load_products():

@@ -1,29 +1,29 @@
-Product Code,Product Name,Qty / Box,Case Available,Stock Available per pcs,Per Case,Rate
-SP10E,10cm Electric Sparklers,10 Pcs,3,900,300,16
-SP10C,10cm Coloured Sparklers,10 Pcs,2,600,300,17
-SP10G,10cm Green Sparklers,10 Pcs,2,600,300,19
-SP10R,10cm Ruby Red Sparklers,10 Pcs,2,600,300,21
-SP10RG,10cm Red and Green Sparklers,10 Pcs,2,600,300,21
-SP12E,12cm Electric Sparklers,10 Pcs,3,900,300,19
-SP12C,12cm Coloured Sparklers,10 Pcs,2,600,300,21
-SP12G,12cm Green Sparklers,10 Pcs,3,900,300,23
-SP12R,12cm Red Sparklers,10 Pcs,3,900,300,25
-SP12RG,12cm Red and Green Sparklers,10 Pcs,3,900,300,25
-SP15E,15cm Electric Sparklers,10 Pcs,3,600,200,30
-SP15C,15cm Coloured Sparklers,10 Pcs,2,400,200,32
-SP15G,15cm Green Sparklers,10 Pcs,3,600,200,35
-SP15R,15cm Red Sparklers,10 Pcs,2,400,200,38
-SP15RG,15cm Red and Green Sparklers,10 Pcs,2,400,200,39
-SP30E,30cm Electric Sparklers,5 Pcs,2,400,200,30
-SP30C,30cm Coloured Sparklers,5 Pcs,2,400,200,32
-SP30G,30cm Green Sparklers,5 Pcs,2,400,200,34
-SP30R,30cm Red Sparklers,5 Pcs,2,400,200,37
-SP30RG,30cm Red and Green Sparklers,5 Pcs,2,400,200,38
-SP30E10,30cm Electric Sparklers (10 Pcs),10 Pcs,2,200,100,60
-SP30C10,30cm Coloured Sparklers (10 Pcs),10 Pcs,2,200,100,70
-SP30M10,30cm Sparklers (10 Pcs),10 Pcs,2,200,100,80
-SP30MC10,30cm Multicolour Sparklers (10 Pcs),10 Pcs,2,200,100,90
-SHOWER,Shower (3 varieties),5Pcs BOX,2,240,120,100
-ASHRAFI,Ashrafi Mix (5 varieties),3Pcs BOX,2,180,90,115
-LETS,Let's Party (4 varieties),1 Pcs,1,72,72,120
-KUKOO,Kukoo Dance,1 Pcs,2,96,48,195
+Product Code,Product Name,Qty / Box,Case Available,Stock Available per pcs,Per Case,Rate,Stock-Sold
+SP10E,10cm Electric Sparklers,10 Pcs,3,900,300,16,
+SP10C,10cm Coloured Sparklers,10 Pcs,2,600,300,17,
+SP10G,10cm Green Sparklers,10 Pcs,2,600,300,19,
+SP10R,10cm Ruby Red Sparklers,10 Pcs,2,600,300,21,
+SP10RG,10cm Red and Green Sparklers,10 Pcs,2,600,300,21,
+SP12E,12cm Electric Sparklers,10 Pcs,3,900,300,19,
+SP12C,12cm Coloured Sparklers,10 Pcs,2,600,300,21,
+SP12G,12cm Green Sparklers,10 Pcs,3,900,300,23,
+SP12R,12cm Red Sparklers,10 Pcs,3,900,300,25,
+SP12RG,12cm Red and Green Sparklers,10 Pcs,3,900,300,25,
+SP15E,15cm Electric Sparklers,10 Pcs,3,600,200,30,
+SP15C,15cm Coloured Sparklers,10 Pcs,2,400,200,32,
+SP15G,15cm Green Sparklers,10 Pcs,3,600,200,35,
+SP15R,15cm Red Sparklers,10 Pcs,2,400,200,38,
+SP15RG,15cm Red and Green Sparklers,10 Pcs,2,400,200,39,
+SP30E,30cm Electric Sparklers,5 Pcs,2,400,200,30,
+SP30C,30cm Coloured Sparklers,5 Pcs,2,400,200,32,
+SP30G,30cm Green Sparklers,5 Pcs,2,400,200,34,
+SP30R,30cm Red Sparklers,5 Pcs,2,400,200,37,
+SP30RG,30cm Red and Green Sparklers,5 Pcs,2,400,200,38,
+SP30E10,30cm Electric Sparklers (10 Pcs),10 Pcs,2,200,100,60,
+SP30C10,30cm Coloured Sparklers (10 Pcs),10 Pcs,2,200,100,70,
+SP30M10,30cm Sparklers (10 Pcs),10 Pcs,2,200,100,80,
+SP30MC10,30cm Multicolour Sparklers (10 Pcs),10 Pcs,2,200,100,90,
+SHOWER,Shower (3 varieties),5Pcs BOX,2,240,120,100,
+ASHRAFI,Ashrafi Mix (5 varieties),3Pcs BOX,2,180,90,115,
+LETS,Let's Party (4 varieties),1 Pcs,1,72,72,120,
+KUKOO,Kukoo Dance,1 Pcs,2,96,48,195,

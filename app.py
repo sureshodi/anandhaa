@@ -54,9 +54,9 @@ if st.session_state.entries:
     discount = st.number_input("Discount (%)", min_value=0.0, max_value=100.0, step=1.0)
     total = sub_total * (1 - discount / 100)
 
-    st.markdown(f"**Sub Total:** ₹{sub_total}")
+    st.markdown(f"**Sub Total:** Rs. {sub_total}")
     st.markdown(f"**Discount:** {discount}%")
-    st.markdown(f"**Total:** ₹{total:.2f}")
+    st.markdown(f"**Total:** Rs. {total:.2f}")
 
     # Generate and download bill files
     if st.button("Generate Bill"):
@@ -71,11 +71,11 @@ if st.session_state.entries:
             for _, row in df.iterrows():
                 f.write(
                     f"{row['S.No']} {row['Product Code']} {row['Product Name']} "
-                    f"Per Case: {row['Per Case']} ₹{row['Rate']} x {row['Qty']} = ₹{row['Amount']}\n"
+                    f"Per Case: {row['Per Case']} Rs. {row['Rate']} x {row['Qty']} = Rs. {row['Amount']}\n"
                 )
-            f.write(f"\nSub Total: ₹{sub_total}\n")
+            f.write(f"\nSub Total: Rs. {sub_total}\n")
             f.write(f"Discount: {discount}%\n")
-            f.write(f"Total: ₹{total:.2f}\n")
+            f.write(f"Total: Rs. {total:.2f}\n")
 
         # Create PDF bill
         pdf = FPDF()
@@ -85,12 +85,12 @@ if st.session_state.entries:
         for _, row in df.iterrows():
             line = (
                 f"{row['S.No']} {row['Product Code']} {row['Product Name']} "
-                f"Per Case: {row['Per Case']} ₹{row['Rate']} x {row['Qty']} = ₹{row['Amount']}"
+                f"Per Case: {row['Per Case']} Rs. {row['Rate']} x {row['Qty']} = Rs. {row['Amount']}"
             )
             pdf.cell(200, 10, txt=line, ln=True)
-        pdf.cell(200, 10, txt=f"Sub Total: ₹{sub_total}", ln=True)
+        pdf.cell(200, 10, txt=f"Sub Total: Rs. {sub_total}", ln=True)
         pdf.cell(200, 10, txt=f"Discount: {discount}%", ln=True)
-        pdf.cell(200, 10, txt=f"Total: ₹{total:.2f}", ln=True)
+        pdf.cell(200, 10, txt=f"Total: Rs. {total:.2f}", ln=True)
         pdf.output(pdf_file)
 
         # Download buttons

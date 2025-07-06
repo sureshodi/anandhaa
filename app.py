@@ -4,11 +4,10 @@ from fpdf import FPDF
 import datetime
 import os
 
-# Cache and load products from CSV
+# Cache and load products
 @st.cache_data
 def load_products():
     df = pd.read_csv("stock_tracking.csv")
-    # Index by Product Code for quick lookups
     return df.set_index("Product Code").T.to_dict()
 
 # Initialize product dictionary
@@ -20,7 +19,7 @@ st.title("🎆 Anandhaa Crackers Wholesale Billing")
 if "entries" not in st.session_state:
     st.session_state.entries = []
 
-# Entry form
+# Input form to add items
 with st.form("add_form"):
     col1, col2 = st.columns(2)
     code = col1.text_input("Enter Product Code").strip().upper()
@@ -46,23 +45,20 @@ if st.session_state.entries:
     df = pd.DataFrame(st.session_state.entries)
     df.insert(0, "S.No", range(1, len(df) + 1))
 
-    # Remove index column by converting to a list of records
+    # Select and display columns without default index
     display_df = df[["S.No", "Product Code", "Product Name", "Per Case", "Qty", "Rate", "Amount"]]
-    st.table(display_df.to_dict(orient='records'))
+    st.table(display_df.style.hide_index())
 
-    # Calculate Sub Total
+    # Summary calculations
     sub_total = df["Amount"].sum()
-    # Discount input
     discount = st.number_input("Discount (%)", min_value=0.0, max_value=100.0, step=1.0)
-    # Calculate Total after discount
     total = sub_total * (1 - discount / 100)
 
-    # Display summary
     st.markdown(f"**Sub Total:** ₹{sub_total}")
     st.markdown(f"**Discount:** {discount}%")
     st.markdown(f"**Total:** ₹{total:.2f}")
 
-    # Generate bill files
+    # Generate and download bill files
     if st.button("Generate Bill"):
         ts = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
         txt_file = f"bill_{ts}.txt"
@@ -70,7 +66,9 @@ if st.session_state.entries:
 
         # Write text bill
         with open(txt_file, "w") as f:
-            f.write("Wholesale Crackers Bill\n=======================\n")
+            f.write("Wholesale Crackers Bill
+=======================
+")
             for _, row in df.iterrows():
                 f.write(
                     f"{row['S.No']} {row['Product Code']} {row['Product Name']} "
@@ -102,7 +100,7 @@ if st.session_state.entries:
         with open(pdf_file, "rb") as pf:
             st.download_button("⬇️ Download PDF Bill", pf, pdf_file)
 
-        # Clear entries after download
+        # Clear session entries
         st.session_state.entries = []
 else:
     st.info("Add products to begin billing.")

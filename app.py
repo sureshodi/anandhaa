@@ -67,7 +67,6 @@ if st.session_state.entries:
 
     # --- Generate Bill TXT & PDF ---
     if st.button("Generate Bill"):
-        # File names
         ts = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
         txt_file = f"bill_{ts}.txt"
         pdf_file = f"bill_{ts}.pdf"
@@ -91,28 +90,35 @@ if st.session_state.entries:
         # Create PDF bill
         pdf = FPDF(orientation='P', unit='mm', format='A4')
         pdf.add_page()
-        # Header image
+
+        # Header image placement
         if os.path.exists(HEADER_IMG):
-            available_w = pdf.w - 20
-            pdf.image(HEADER_IMG, x=10, y=8, w=available_w)
-            pdf.ln(25)
-        # Title
+            avail_w = pdf.w - 20
+            header_h = 40
+            y_start = pdf.get_y()
+            pdf.image(HEADER_IMG, x=10, y=y_start, w=avail_w, h=header_h)
+            pdf.ln(header_h + 5)
+        else:
+            pdf.ln(15)
+
+        # Title below header
         pdf.set_font("Arial","B",14)
-        pdf.cell(0,10,"SALES ORDER",ln=True, align='C')
-        pdf.ln(5)
-        # Customer info
+        pdf.cell(0,10,"SALES ORDER", ln=True, align='C')
+        pdf.ln(3)
+
+        # Customer info below title
         pdf.set_font("Arial",size=10)
-        pdf.cell(0,6,f"Customer: {customer_name} | {customer_mobile}",ln=True)
-        pdf.multi_cell(0,6,f"Address: {customer_address}")
+        pdf.cell(0,6,f"Customer: {customer_name} | {customer_mobile}", ln=True)
+        pdf.multi_cell(0,6, f"Address: {customer_address}")
         pdf.ln(5)
 
         # Table header
         pdf.set_font("Arial","B",10)
         col_w = [12,30,60,25,15,20,25]
         headers = ["S.No","Code","Name","Per Case","Qty","Rate","Amount"]
-        for w, h in zip(col_w, headers):
-            pdf.cell(w,7,h,1,0,'C')
+        for w, h in zip(col_w, headers): pdf.cell(w,7,h,1,0,'C')
         pdf.ln()
+
         # Table rows
         pdf.set_font("Arial",size=10)
         for _, row in df.iterrows():
@@ -125,22 +131,17 @@ if st.session_state.entries:
             pdf.cell(col_w[6],6,str(row['Amount']),1,0,'R')
             pdf.ln()
 
-        # Adjusted summary under Rate column
+        # Summary under Rate column
         pdf.ln(2)
-        # Blank cells for first 5 columns
-        for w in col_w[:5]:
-            pdf.cell(w,6,"",0)
-        # Sub Total label under Rate
+        for w in col_w[:5]: pdf.cell(w,6,'',0)
         pdf.cell(col_w[5],6,"Sub Total",1,0,'R')
         pdf.cell(col_w[6],6,f"Rs. {sub_total}",1,1,'R')
-        # Discount row
-        for w in col_w[:5]:
-            pdf.cell(w,6,"",0)
+
+        for w in col_w[:5]: pdf.cell(w,6,'',0)
         pdf.cell(col_w[5],6,"Discount",1,0,'R')
         pdf.cell(col_w[6],6,f"{discount}%",1,1,'R')
-        # Total row
-        for w in col_w[:5]:
-            pdf.cell(w,6,"",0)
+
+        for w in col_w[:5]: pdf.cell(w,6,'',0)
         pdf.cell(col_w[5],6,"Total",1,0,'R')
         pdf.cell(col_w[6],6,f"Rs. {total:.2f}",1,1,'R')
 

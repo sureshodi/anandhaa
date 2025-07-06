@@ -1,73 +1,84 @@
 import streamlit as st
 import pandas as pd
+from fpdf import FPDF
+import datetime
+import os
 
-# Load CSV files
-def load_stock_data(file):
-    return pd.read_csv(file)
+# Load products from CSV
+@st.cache_data
+def load_products():
+    df = pd.read_csv("stock_tracking.csv")
+    return df.set_index("Product Code").T.to_dict()
 
-def load_sales_data(file):
-    return pd.read_csv(file)
+product_dict = load_products()
 
-# Update stock and stock sold columns
-def update_stock(stock_df, product_code, quantity):
-    stock_df.loc[stock_df['Product Code'] == product_code, 'Stock Sold'] += quantity
-    stock_df.loc[stock_df['Product Code'] == product_code, 'Stock Available per pcs'] -= quantity
-    return stock_df
+st.title("🎆 Crackers Wholesale Billing App")
 
-# Streamlit app
-st.title("Crackers Business Bill Generation and Stock Tracking")
+# Input table
+if "entries" not in st.session_state:
+    st.session_state.entries = []
 
-# Upload CSV files
-stock_file = st.file_uploader("Upload Stock Tracking CSV", type="csv")
-if stock_file is not None:
-    stock_df = load_stock_data(stock_file)
-    st.write("Stock Tracking Data:")
-    st.dataframe(stock_df)
+with st.form("add_form"):
+    col1, col2 = st.columns(2)
+    code = col1.text_input("Enter Product Code").strip().upper()
+    qty = col2.number_input("Enter Quantity", min_value=1, step=1)
 
-sales_file = st.file_uploader("Upload Sales Data CSV", type="csv")
-if sales_file is not None:
-    sales_df = load_sales_data(sales_file)
-    st.write("Sales Data (Bill Generation):")
-    st.dataframe(sales_df)
+    submitted = st.form_submit_button("Add Item")
+    if submitted:
+        if code not in product_dict:
+            st.error(f"❌ Product code '{code}' not found.")
+        else:
+            prod = product_dict[code]
+            name = prod['Product Name']
+            price = prod['Rate per Pcs']
+            amount = price * qty
+            st.session_state.entries.append({
+                "code": code,
+                "name": name,
+                "price": price,
+                "qty": qty,
+                "total": amount
+            })
 
-# Customer Details
-customer_name = st.text_input("Enter Customer Name")
-customer_mobile = st.text_input("Enter Customer Mobile")
+# Show bill items
+if st.session_state.entries:
+    st.subheader("🧾 Bill Items")
+    df = pd.DataFrame(st.session_state.entries)
+    st.table(df[["code", "name", "price", "qty", "total"]])
+    total_amt = df["total"].sum()
+    st.markdown(f"### ✅ Total: ₹{total_amt}")
 
-# Product Code
-product_code = st.text_input("Enter Product Code (e.g., SP10E)")
+    if st.button("Generate Bill"):
+        timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+        txt_filename = f"bill_{timestamp}.txt"
+        pdf_filename = f"bill_{timestamp}.pdf"
 
-if product_code:
-    product_data = stock_df[stock_df['Product Code'] == product_code]
-    if not product_data.empty:
-        product_name = product_data['Product Name'].values[0]
-        per_case = product_data['Per Case'].values[0]
-        rate_per_pcs = product_data['Rate'].values[0]
-        st.write(f"Product: {product_name}")
-        st.write(f"Per Case: {per_case}")
-        st.write(f"Rate per Piece: ₹{rate_per_pcs}")
-    else:
-        st.error("Product Code not found")
+        # Save text bill
+        with open(txt_filename, "w") as f:
+            f.write("==== Wholesale Crackers Bill ====\n")
+            for e in st.session_state.entries:
+                f.write(f"{e['code']} - {e['name']} - ₹{e['price']} x {e['qty']} = ₹{e['total']}\n")
+            f.write(f"\nTOTAL: ₹{total_amt}\n")
 
-if product_code and not product_data.empty:
-    quantity = st.number_input("Enter Quantity", min_value=1, step=1)
-    if quantity:
-        amount = rate_per_pcs * quantity
-        st.write(f"Amount: ₹{amount}")
+        # Create PDF
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font("Arial", size=12)
+        pdf.cell(200, 10, txt="Wholesale Crackers Bill", ln=True, align='C')
+        for e in st.session_state.entries:
+            line = f"{e['code']} - {e['name']} - ₹{e['price']} x {e['qty']} = ₹{e['total']}"
+            pdf.cell(200, 10, txt=line, ln=True)
+        pdf.cell(200, 10, txt=f"TOTAL: ₹{total_amt}", ln=True)
+        pdf.output(pdf_filename)
 
-if st.button("Generate Bill and Update Stock"):
-    if product_code and customer_name and customer_mobile and quantity:
-        updated_stock_df = update_stock(stock_df, product_code, quantity)
-        st.write("Updated Stock Data:")
-        st.dataframe(updated_stock_df)
+        with open(txt_filename, "rb") as f:
+            st.download_button("⬇️ Download Text Bill", f, txt_filename)
 
-        # Option to download the updated stock CSV
-        csv = updated_stock_df.to_csv(index=False)
-        st.download_button(
-            label="Download Updated Stock CSV",
-            data=csv,
-            file_name='updated_stock.csv',
-            mime='text/csv'
-        )
-    else:
-        st.error("Please fill in all fields to generate the bill.")
+        with open(pdf_filename, "rb") as f:
+            st.download_button("⬇️ Download PDF Bill", f, pdf_filename)
+
+        # Optional: clear old entries
+        st.session_state.entries = []
+
+else:
+    st.info("Add products to begin billing.")

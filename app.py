@@ -47,10 +47,10 @@ if st.session_state.entries:
     st.subheader("🧾 Bill Items")
     df = pd.DataFrame(st.session_state.entries)
 
-    # Add S.No column
+    # Add S.No column starting from 1
     df.insert(0, "S.No", range(1, len(df) + 1))
     
-    # Display only the relevant columns
+    # Display only the relevant columns (S.No, Product Code, Product Name, Per Case, Qty, Rate, Amount)
     st.table(df[["S.No", "code", "name", "per_case", "qty", "rate", "amount"]])
 
     total_amt = df["amount"].sum()

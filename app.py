@@ -5,24 +5,27 @@ import datetime
 import os
 import unicodedata
 
-# --- Shop Header Image ---
-HEADER_IMG = "header.png"
+# -------------------- Constants --------------------
+HEADER_IMG = "header.png"   # optional
+CSV_FILE   = "stock_tracking.csv"
+
+# -------------------- Header --------------------
 if os.path.exists(HEADER_IMG):
     st.image(HEADER_IMG, use_container_width=True)
 else:
     st.title("Anandhaa Crackers Wholesale Billing")
 
-# --- Customer Details Inputs ---
+# -------------------- Customer Details --------------------
 st.subheader("Customer Details")
 customer_name = st.text_input("Customer Name")
 customer_mobile = st.text_input("Customer Mobile")
 customer_address = st.text_area("Customer Address")
 
-# --- Load Products CSV ---
+# -------------------- Load Products --------------------
 @st.cache_data
 def load_products():
     # Expected columns: Product Code, Product Name, Per Case, Rate
-    df = pd.read_csv("stock_tracking.csv")
+    df = pd.read_csv(CSV_FILE)
     d = {}
     for _, r in df.iterrows():
         code = str(r["Product Code"]).strip().upper()
@@ -36,26 +39,24 @@ def load_products():
 
 product_dict = load_products()
 
-# --- Initialize order entries ---
+# -------------------- Session State --------------------
 if "entries" not in st.session_state:
     st.session_state.entries = []
 
-# --------- Unicode helpers for FPDF ---------
+# -------------------- FPDF Unicode Helpers --------------------
 def ascii_safe(text: str) -> str:
-    """Strip/replace to ASCII for when we don't have a Unicode font."""
+    """Sanitize text to ASCII for when no Unicode TTF is loaded."""
     if text is None:
         return ""
     t = unicodedata.normalize("NFKD", str(text))
-    t = (
-        t.replace("…", "...")
-         .replace("−", "-")
-         .replace("—", "-")
-         .replace("–", "-")
-    )
+    t = (t.replace("…", "...")
+           .replace("−", "-")
+           .replace("—", "-")
+           .replace("–", "-"))
     return t.encode("ascii", "ignore").decode("ascii")
 
 def find_font_paths():
-    """Return (regular_path, bold_path) if found, else (None, None)."""
+    """Return (regular_path, bold_path) if found."""
     candidates_regular = [
         "fonts/NotoSansTamil-Regular.ttf",
         "fonts/NotoSans-Regular.ttf",
@@ -77,11 +78,12 @@ def find_font_paths():
     return reg, bold
 
 class PDF(FPDF):
+    """FPDF wrapper that optionally uses a Unicode TTF (regular + bold)."""
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.unicode_font_loaded = False
         self.bold_supported = False
-        self.font_family_name = "Arial"  # fallback core font family
+        self.font_family_name = "Arial"  # fallback
 
         reg_path, bold_path = find_font_paths()
         if reg_path:
@@ -95,19 +97,17 @@ class PDF(FPDF):
 
         if self.unicode_font_loaded and bold_path:
             try:
-                # Add bold face for the same family name
                 self.add_font("Universal", "B", bold_path, uni=True)
                 self.bold_supported = True
             except Exception:
                 self.bold_supported = False
 
     def set_u_font(self, size: int, bold: bool = False):
-        """Set font with optional bold. If bold TTF isn't available, fall back to normal."""
+        """Set font with optional bold; safe fallback if bold TTF missing."""
         if self.unicode_font_loaded:
             style = "B" if (bold and self.bold_supported) else ""
             self.set_font(self.font_family_name, style, size)
         else:
-            # Core fonts (Arial) support style toggling without extra TTFs
             style = "B" if bold else ""
             self.set_font("Arial", style, size)
 
@@ -121,7 +121,7 @@ class PDF(FPDF):
             txt = ascii_safe(txt)
         super().multi_cell(w, h, txt, border, align, fill)
 
-# --- Add Order Items Form ---
+# -------------------- Add Order Items --------------------
 with st.form("add_form"):
     st.subheader("Add Order Items")
 
@@ -150,7 +150,7 @@ with st.form("add_form"):
             })
             st.success(f"Added {code_input} — {prod['Product Name']} (Qty {qty_input})")
 
-# --- Display Order Table and Summary ---
+# -------------------- Table + Totals --------------------
 if st.session_state.entries:
     st.subheader("Order Details")
     df = pd.DataFrame(st.session_state.entries)
@@ -158,7 +158,7 @@ if st.session_state.entries:
     display_df = df[["S.No","Product Code","Product Name","Per Case","Qty","Rate","Amount"]]
     st.dataframe(display_df, hide_index=True, use_container_width=True)
 
-    # Delete item control (by S.No)
+    # Delete item
     del_col1, del_col2 = st.columns([2,1])
     if len(display_df) > 0:
         s_no_to_delete = del_col1.selectbox(
@@ -191,7 +191,7 @@ if st.session_state.entries:
     st.markdown(f"**Package Charges:** {pkg_charges:.2f}% → Rs. {pkg_amount:.2f}")
     st.markdown(f"**Total:** Rs. {total:.2f}")
 
-    # --- Generate Bill TXT & PDF ---
+    # -------------------- Generate Bill --------------------
     if st.button("Generate Bill"):
         ts = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
         txt_file = f"bill_{ts}.txt"
@@ -229,7 +229,7 @@ if st.session_state.entries:
             pdf.ln(15)
 
         # Title
-        pdf.set_u_font(size=14, bold=True)  # will fall back to non-bold if bold TTF not loaded
+        pdf.set_u_font(size=14, bold=True)  # real bold if bold TTF found
         pdf.safe_cell(0, 10, "SALES ORDER", ln=True, align='C')
         pdf.ln(3)
 
@@ -241,7 +241,7 @@ if st.session_state.entries:
 
         # Table header
         pdf.set_u_font(size=10, bold=True)
-        col_w = [12,30,60,25,15,20,25]
+        col_w = [12,30,60,25,15,20,25]  # widths for: S.No Code Name PerCase Qty Rate Amount
         headers = ["S.No","Code","Name","Per Case","Qty","Rate","Amount"]
         for w, h in zip(col_w, headers):
             pdf.safe_cell(w,7,h,1,0,'C')
@@ -262,24 +262,34 @@ if st.session_state.entries:
             pdf.safe_cell(col_w[6],6,f"{row['Amount']:.2f}",1,0,'R')
             pdf.ln()
 
-        # Summary
+        # -------- Neat summary box aligned to right margin --------
+        line_h = 6
+        gap_y = 3           # space above the summary box
+        rows_needed = 4     # Sub Total, Discount, Package Charges, Total
+        box_w = col_w[5] + col_w[6]
+
+        def ensure_space(rows):
+            needed = rows * line_h + gap_y
+            if pdf.get_y() + needed > (pdf.h - pdf.b_margin):
+                pdf.add_page()
+
+        def summary_row(label: str, value: str):
+            x_right = pdf.w - pdf.r_margin
+            start_x = x_right - box_w
+            pdf.set_xy(start_x, pdf.get_y())
+            pdf.safe_cell(col_w[5], line_h, label, 1, 0, 'R')
+            pdf.safe_cell(col_w[6], line_h, value, 1, 1, 'R')
+
         pdf.ln(2)
-        for w in col_w[:5]: pdf.safe_cell(w,6,'',0)
-        pdf.safe_cell(col_w[5],6,"Sub Total",1,0,'R')
-        pdf.safe_cell(col_w[6],6,f"Rs. {sub_total:.2f}",1,1,'R')
+        ensure_space(rows_needed)
+        pdf.ln(gap_y)
 
-        for w in col_w[:5]: pdf.safe_cell(w,6,'',0)
-        pdf.safe_cell(col_w[5],6,"Discount",1,0,'R')
-        pdf.safe_cell(col_w[6],6,f"{discount:.2f}% (-Rs. {discount_value:.2f})",1,1,'R')
+        summary_row("Sub Total",       f"Rs. {sub_total:.2f}")
+        summary_row("Discount",        f"{discount:.2f}% (−Rs. {discount_value:.2f})")
+        summary_row("Package Charges", f"{pkg_charges:.2f}% (+Rs. {pkg_amount:.2f})")
+        summary_row("Total",           f"Rs. {total:.2f}")
 
-        for w in col_w[:5]: pdf.safe_cell(w,6,'',0)
-        pdf.safe_cell(col_w[5],6,"Package Charges",1,0,'R')
-        pdf.safe_cell(col_w[6],6,f"{pkg_charges:.2f}% (+Rs. {pkg_amount:.2f})",1,1,'R')
-
-        for w in col_w[:5]: pdf.safe_cell(w,6,'',0)
-        pdf.safe_cell(col_w[5],6,"Total",1,0,'R')
-        pdf.safe_cell(col_w[6],6,f"Rs. {total:.2f}",1,1,'R')
-
+        # Output files
         pdf.output(pdf_file)
         with open(txt_file,'rb') as tf:
             st.download_button("⬇️ Download Text Bill", tf, txt_file)

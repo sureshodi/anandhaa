@@ -4,14 +4,12 @@ from fpdf import FPDF
 import datetime
 import os
 import unicodedata
-from pathlib import Path
 
 # --- Shop Header Image ---
 HEADER_IMG = "header.png"
 if os.path.exists(HEADER_IMG):
     st.image(HEADER_IMG, use_container_width=True)
 else:
-    # Avoid emojis here just to keep everything simple
     st.title("Anandhaa Crackers Wholesale Billing")
 
 # --- Customer Details Inputs ---
@@ -42,58 +40,76 @@ product_dict = load_products()
 if "entries" not in st.session_state:
     st.session_state.entries = []
 
-# -------------------- PDF Unicode helpers --------------------
-def find_font_file() -> str | None:
-    """
-    Try to locate a TTF that supports broad Unicode.
-    Add your own font file to ./fonts if needed (e.g., NotoSansTamil-Regular.ttf).
-    """
-    candidates = [
-        # Local project
+# --------- Unicode helpers for FPDF ---------
+def ascii_safe(text: str) -> str:
+    """Strip/replace to ASCII for when we don't have a Unicode font."""
+    if text is None:
+        return ""
+    t = unicodedata.normalize("NFKD", str(text))
+    t = (
+        t.replace("…", "...")
+         .replace("−", "-")
+         .replace("—", "-")
+         .replace("–", "-")
+    )
+    return t.encode("ascii", "ignore").decode("ascii")
+
+def find_font_paths():
+    """Return (regular_path, bold_path) if found, else (None, None)."""
+    candidates_regular = [
         "fonts/NotoSansTamil-Regular.ttf",
         "fonts/NotoSans-Regular.ttf",
         "fonts/DejaVuSans.ttf",
-        "NotoSansTamil-Regular.ttf",
-        "NotoSans-Regular.ttf",
-        "DejaVuSans.ttf",
-        # System common paths
         "/usr/share/fonts/truetype/noto/NotoSansTamil-Regular.ttf",
         "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-        "/usr/local/share/fonts/NotoSansTamil-Regular.ttf",
-        "/usr/local/share/fonts/NotoSans-Regular.ttf",
-        "/usr/local/share/fonts/DejaVuSans.ttf",
     ]
-    for p in candidates:
-        if os.path.exists(p):
-            return p
-    return None
-
-def ascii_safe(text: str) -> str:
-    """Strip/replace to ASCII so fpdf 1.x won't crash when no Unicode font is available."""
-    if text is None:
-        return ""
-    # Normalize then encode to ASCII, dropping accents & unsupported chars
-    t = unicodedata.normalize("NFKD", str(text))
-    t = t.replace("…", "...").replace("−", "-").replace("—", "-").replace("–", "-")
-    return t.encode("ascii", "ignore").decode("ascii")
+    candidates_bold = [
+        "fonts/NotoSansTamil-Bold.ttf",
+        "fonts/NotoSans-Bold.ttf",
+        "fonts/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/noto/NotoSansTamil-Bold.ttf",
+        "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    ]
+    reg = next((p for p in candidates_regular if os.path.exists(p)), None)
+    bold = next((p for p in candidates_bold if os.path.exists(p)), None)
+    return reg, bold
 
 class PDF(FPDF):
-    """FPDF with optional Unicode TrueType font if found."""
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.unicode_font_loaded = False
-        self.font_name = "Arial"  # default
-        font_path = find_font_file()
-        if font_path:
+        self.bold_supported = False
+        self.font_family_name = "Arial"  # fallback core font family
+
+        reg_path, bold_path = find_font_paths()
+        if reg_path:
             try:
-                # Register as 'Universal'
-                self.add_font("Universal", "", font_path, uni=True)
-                self.font_name = "Universal"
+                self.add_font("Universal", "", reg_path, uni=True)
+                self.font_family_name = "Universal"
                 self.unicode_font_loaded = True
             except Exception:
-                # If registration fails, we'll fall back to ASCII-sanitized text
                 self.unicode_font_loaded = False
+                self.font_family_name = "Arial"
+
+        if self.unicode_font_loaded and bold_path:
+            try:
+                # Add bold face for the same family name
+                self.add_font("Universal", "B", bold_path, uni=True)
+                self.bold_supported = True
+            except Exception:
+                self.bold_supported = False
+
+    def set_u_font(self, size: int, bold: bool = False):
+        """Set font with optional bold. If bold TTF isn't available, fall back to normal."""
+        if self.unicode_font_loaded:
+            style = "B" if (bold and self.bold_supported) else ""
+            self.set_font(self.font_family_name, style, size)
+        else:
+            # Core fonts (Arial) support style toggling without extra TTFs
+            style = "B" if bold else ""
+            self.set_font("Arial", style, size)
 
     def safe_cell(self, w, h=0, txt="", border=0, ln=0, align="", fill=False, link=""):
         if not self.unicode_font_loaded:
@@ -105,12 +121,11 @@ class PDF(FPDF):
             txt = ascii_safe(txt)
         super().multi_cell(w, h, txt, border, align, fill)
 
-# -------------------- Add Order Items Form --------------------
+# --- Add Order Items Form ---
 with st.form("add_form"):
     st.subheader("Add Order Items")
 
     codes = sorted(product_dict.keys())
-    # Searchable label
     labels = [f"{c} — {product_dict[c]['Product Name']} — Rs.{product_dict[c]['Rate']:.2f}" for c in codes]
     label_to_code = {label: code for label, code in zip(labels, codes)}
 
@@ -135,7 +150,7 @@ with st.form("add_form"):
             })
             st.success(f"Added {code_input} — {prod['Product Name']} (Qty {qty_input})")
 
-# -------------------- Display Order Table and Summary --------------------
+# --- Display Order Table and Summary ---
 if st.session_state.entries:
     st.subheader("Order Details")
     df = pd.DataFrame(st.session_state.entries)
@@ -172,52 +187,36 @@ if st.session_state.entries:
     total = discounted_total + pkg_amount
 
     st.markdown(f"**Sub Total:** Rs. {sub_total:.2f}")
-    st.markdown(f"**Discount:** {discount:.2f}% -> Rs. {discount_value:.2f}")
-    st.markdown(f"**Package Charges:** {pkg_charges:.2f}% -> Rs. {pkg_amount:.2f}")
+    st.markdown(f"**Discount:** {discount:.2f}% → Rs. {discount_value:.2f}")
+    st.markdown(f"**Package Charges:** {pkg_charges:.2f}% → Rs. {pkg_amount:.2f}")
     st.markdown(f"**Total:** Rs. {total:.2f}")
 
-    # -------------------- Generate Bill TXT & PDF --------------------
+    # --- Generate Bill TXT & PDF ---
     if st.button("Generate Bill"):
         ts = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
         txt_file = f"bill_{ts}.txt"
         pdf_file = f"bill_{ts}.pdf"
 
-        # Text bill (always ASCII-safe; Streamlit can show Unicode, but text file is fine either way)
-        def txt_safe(s: str) -> str:
-            # For consistent text output, keep ASCII
-            return ascii_safe(s)
-
+        # Text bill
         with open(txt_file, "w", encoding="utf-8") as f:
             if os.path.exists(HEADER_IMG):
                 f.write(f"[Header Image: {HEADER_IMG}]\n")
             f.write("SALES ORDER\n=======================\n")
-            f.write(f"Customer: {txt_safe(customer_name)} | {txt_safe(customer_mobile)}\n")
-            f.write(f"Address: {txt_safe(customer_address)}\n\n")
+            f.write(f"Customer: {customer_name} | {customer_mobile}\n")
+            f.write(f"Address: {customer_address}\n\n")
             for _, row in df.iterrows():
                 f.write(
-                    f"{row['S.No']} {txt_safe(row['Product Code'])} {txt_safe(row['Product Name'])} "
-                    f"Per Case: {txt_safe(row['Per Case'])} Rs. {row['Rate']:.2f} x {row['Qty']} = Rs. {row['Amount']:.2f}\n"
+                    f"{row['S.No']} {row['Product Code']} {row['Product Name']} "
+                    f"Per Case: {row['Per Case']} Rs. {row['Rate']:.2f} x {row['Qty']} = Rs. {row['Amount']:.2f}\n"
                 )
             f.write(f"\nSub Total: Rs. {sub_total:.2f}\n")
             f.write(f"Discount: {discount:.2f}%  (-Rs. {discount_value:.2f})\n")
             f.write(f"Package Charges: {pkg_charges:.2f}%  (+Rs. {pkg_amount:.2f})\n")
             f.write(f"Total: Rs. {total:.2f}\n")
 
-        # PDF bill with Unicode font if available
+        # PDF bill
         pdf = PDF(orientation='P', unit='mm', format='A4')
         pdf.add_page()
-
-        # Select fonts
-        if pdf.unicode_font_loaded:
-            pdf.set_font(pdf.font_name, size=10)
-            hfont = (pdf.font_name, 14, "B")
-            thfont = (pdf.font_name, 10, "B")
-            rfont = (pdf.font_name, 10, "")
-        else:
-            pdf.set_font("Arial", size=10)
-            hfont = ("Arial", 14, "B")
-            thfont = ("Arial", 10, "B")
-            rfont = ("Arial", 10, "")
 
         # Header image
         if os.path.exists(HEADER_IMG):
@@ -230,18 +229,18 @@ if st.session_state.entries:
             pdf.ln(15)
 
         # Title
-        pdf.set_font(hfont[0], hfont[2], hfont[1])
+        pdf.set_u_font(size=14, bold=True)  # will fall back to non-bold if bold TTF not loaded
         pdf.safe_cell(0, 10, "SALES ORDER", ln=True, align='C')
         pdf.ln(3)
 
         # Customer info
-        pdf.set_font(rfont[0], "", rfont[1])
+        pdf.set_u_font(size=10, bold=False)
         pdf.safe_cell(0, 6, f"Customer: {customer_name} | {customer_mobile}", ln=True)
         pdf.safe_multi_cell(0, 6, f"Address: {customer_address}")
         pdf.ln(5)
 
         # Table header
-        pdf.set_font(thfont[0], thfont[2], thfont[1])
+        pdf.set_u_font(size=10, bold=True)
         col_w = [12,30,60,25,15,20,25]
         headers = ["S.No","Code","Name","Per Case","Qty","Rate","Amount"]
         for w, h in zip(col_w, headers):
@@ -249,10 +248,9 @@ if st.session_state.entries:
         pdf.ln()
 
         # Table rows
-        pdf.set_font(rfont[0], "", rfont[1])
+        pdf.set_u_font(size=10, bold=False)
         for _, row in df.iterrows():
             name = str(row['Product Name'])
-            # avoid Unicode ellipsis
             if len(name) > 28:
                 name = name[:27] + "..."
             pdf.safe_cell(col_w[0],6,str(row['S.No']),1)
@@ -282,7 +280,6 @@ if st.session_state.entries:
         pdf.safe_cell(col_w[5],6,"Total",1,0,'R')
         pdf.safe_cell(col_w[6],6,f"Rs. {total:.2f}",1,1,'R')
 
-        # Output files
         pdf.output(pdf_file)
         with open(txt_file,'rb') as tf:
             st.download_button("⬇️ Download Text Bill", tf, txt_file)

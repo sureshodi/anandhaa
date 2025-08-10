@@ -45,11 +45,19 @@ with st.form("add_form"):
 
     codes = sorted(product_dict.keys())
     # Rich label for easier search
-    labels = [f"{c} — {product_dict[c]['Product Name']} — Rs.{product_dict[c]['Rate']:.2f}" for c in codes]
+    labels = [
+        f"{c} — {product_dict[c]['Product Name']} — Rs.{product_dict[c]['Rate']:.2f}"
+        for c in codes
+    ]
     label_to_code = {label: code for label, code in zip(labels, codes)}
 
     col1, col2 = st.columns([2,1])
-    chosen_label = col1.selectbox("Product Code", options=labels, index=None, placeholder="Select a product code")
+    chosen_label = col1.selectbox(
+        "Product Code",
+        options=labels,
+        index=None,
+        placeholder="Select a product code"
+    )
     qty_input = col2.number_input("Quantity", min_value=1, step=1)
 
     submitted_item = st.form_submit_button("Add Item")
@@ -77,7 +85,7 @@ if st.session_state.entries:
     display_df = df[["S.No","Product Code","Product Name","Per Case","Qty","Rate","Amount"]]
     st.dataframe(display_df, hide_index=True, use_container_width=True)
 
-    # Delete item control (by S.No)
+    # --- Delete item control (by S.No)
     del_col1, del_col2 = st.columns([2,1])
     if len(display_df) > 0:
         s_no_to_delete = del_col1.selectbox(
@@ -93,12 +101,21 @@ if st.session_state.entries:
                 st.success(f"Removed {removed['Product Code']} — {removed['Product Name']}")
                 st.rerun()
 
-    # Totals
+    # --- Totals
     sub_total = float(df["Amount"].sum())
+
     discount = st.number_input("Discount (%)", min_value=0.0, max_value=100.0, step=1.0)
-    total = sub_total * (1 - discount/100)
+    discounted_total = sub_total * (1 - discount/100)
+    discount_value = sub_total - discounted_total
+
+    pkg_charges = st.number_input("Package Charges (%)", min_value=0.0, max_value=100.0, step=0.5)
+    pkg_amount = discounted_total * (pkg_charges/100)
+
+    total = discounted_total + pkg_amount
+
     st.markdown(f"**Sub Total:** Rs. {sub_total:.2f}")
-    st.markdown(f"**Discount:** {discount}%")
+    st.markdown(f"**Discount:** {discount:.2f}% → Rs. {discount_value:.2f}")
+    st.markdown(f"**Package Charges:** {pkg_charges:.2f}% → Rs. {pkg_amount:.2f}")
     st.markdown(f"**Total:** Rs. {total:.2f}")
 
     # --- Generate Bill TXT & PDF ---
@@ -120,7 +137,8 @@ if st.session_state.entries:
                     f"Per Case: {row['Per Case']} Rs. {row['Rate']:.2f} x {row['Qty']} = Rs. {row['Amount']:.2f}\n"
                 )
             f.write(f"\nSub Total: Rs. {sub_total:.2f}\n")
-            f.write(f"Discount: {discount}%\n")
+            f.write(f"Discount: {discount:.2f}%  (-Rs. {discount_value:.2f})\n")
+            f.write(f"Package Charges: {pkg_charges:.2f}%  (+Rs. {pkg_amount:.2f})\n")
             f.write(f"Total: Rs. {total:.2f}\n")
 
         # PDF bill
@@ -166,6 +184,7 @@ if st.session_state.entries:
             pdf.cell(col_w[6],6,f"{row['Amount']:.2f}",1,0,'R')
             pdf.ln()
 
+        # Summary
         pdf.ln(2)
         for w in col_w[:5]: pdf.cell(w,6,'',0)
         pdf.cell(col_w[5],6,"Sub Total",1,0,'R')
@@ -173,7 +192,11 @@ if st.session_state.entries:
 
         for w in col_w[:5]: pdf.cell(w,6,'',0)
         pdf.cell(col_w[5],6,"Discount",1,0,'R')
-        pdf.cell(col_w[6],6,f"{discount}%",1,1,'R')
+        pdf.cell(col_w[6],6,f"{discount:.2f}% (−Rs. {discount_value:.2f})",1,1,'R')
+
+        for w in col_w[:5]: pdf.cell(w,6,'',0)
+        pdf.cell(col_w[5],6,"Package Charges",1,0,'R')
+        pdf.cell(col_w[6],6,f"{pkg_charges:.2f}% (+Rs. {pkg_amount:.2f})",1,1,'R')
 
         for w in col_w[:5]: pdf.cell(w,6,'',0)
         pdf.cell(col_w[5],6,"Total",1,0,'R')

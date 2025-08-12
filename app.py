@@ -337,8 +337,8 @@ if st.session_state.entries:
         pdf.ln(gap_y)
 
         summary_row("Sub Total",  f"Rs. {sub_total:.2f}")
-        summary_row("DISCOUNT",   f"{st.session_state.discount:.2f}% -> Rs. {discount_value:.2f}")
-        summary_row("PACK CHG",   f"{st.session_state.pkg_charges:.2f}% -> Rs. {pkg_amount:.2f}")
+        summary_row("DISCOUNT",   f"Rs. {discount_value:.2f}")
+        summary_row("PACK CHG",   f"Rs. {pkg_amount:.2f}")
         summary_row("Total",      f"Rs. {total:.2f}")
 
         # Output files (write local & also provide downloads)

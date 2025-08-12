@@ -3,25 +3,28 @@ import pandas as pd
 from fpdf import FPDF
 import datetime
 import os
+import unicodedata
 
-# --- Shop Header Image ---
-HEADER_IMG = "header.png"
+# -------------------- Constants --------------------
+HEADER_IMG = "header.png"            # optional
+CSV_FILE   = "stock_tracking.csv"    # expects: Product Code, Product Name, Per Case, Rate
+
+# -------------------- Header --------------------
 if os.path.exists(HEADER_IMG):
     st.image(HEADER_IMG, use_container_width=True)
 else:
-    st.title("🎆 Anandhaa Crackers Wholesale Billing 🎆")
+    st.title("Anandhaa Crackers Wholesale Billing")
 
-# --- Customer Details Inputs ---
+# -------------------- Customer Details --------------------
 st.subheader("Customer Details")
 customer_name = st.text_input("Customer Name")
 customer_mobile = st.text_input("Customer Mobile")
 customer_address = st.text_area("Customer Address")
 
-# --- Load Products CSV ---
+# -------------------- Load Products --------------------
 @st.cache_data
 def load_products():
-    # Expected columns: Product Code, Product Name, Per Case, Rate
-    df = pd.read_csv("stock_tracking.csv")
+    df = pd.read_csv(CSV_FILE)
     d = {}
     for _, r in df.iterrows():
         code = str(r["Product Code"]).strip().upper()
@@ -35,16 +38,90 @@ def load_products():
 
 product_dict = load_products()
 
-# --- Initialize order entries ---
+# -------------------- Session State --------------------
 if "entries" not in st.session_state:
     st.session_state.entries = []
 
-# --- Add Order Items Form ---
+# -------------------- FPDF Unicode Helpers --------------------
+def ascii_safe(text: str) -> str:
+    if text is None:
+        return ""
+    t = unicodedata.normalize("NFKD", str(text))
+    t = (t.replace("…", "...")
+           .replace("−", "-")
+           .replace("—", "-")
+           .replace("–", "-"))
+    return t.encode("ascii", "ignore").decode("ascii")
+
+def find_font_paths():
+    candidates_regular = [
+        "fonts/NotoSansTamil-Regular.ttf",
+        "fonts/NotoSans-Regular.ttf",
+        "fonts/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/noto/NotoSansTamil-Regular.ttf",
+        "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    ]
+    candidates_bold = [
+        "fonts/NotoSansTamil-Bold.ttf",
+        "fonts/NotoSans-Bold.ttf",
+        "fonts/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/noto/NotoSansTamil-Bold.ttf",
+        "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    ]
+    reg = next((p for p in candidates_regular if os.path.exists(p)), None)
+    bold = next((p for p in candidates_bold if os.path.exists(p)), None)
+    return reg, bold
+
+class PDF(FPDF):
+    """FPDF wrapper that optionally uses a Unicode TTF (regular + bold)."""
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.unicode_font_loaded = False
+        self.bold_supported = False
+        self.font_family_name = "Arial"  # fallback
+
+        reg_path, bold_path = find_font_paths()
+        if reg_path:
+            try:
+                self.add_font("Universal", "", reg_path, uni=True)
+                self.font_family_name = "Universal"
+                self.unicode_font_loaded = True
+            except Exception:
+                self.unicode_font_loaded = False
+                self.font_family_name = "Arial"
+
+        if self.unicode_font_loaded and bold_path:
+            try:
+                self.add_font("Universal", "B", bold_path, uni=True)
+                self.bold_supported = True
+            except Exception:
+                self.bold_supported = False
+
+    def set_u_font(self, size: int, bold: bool = False):
+        if self.unicode_font_loaded:
+            style = "B" if (bold and self.bold_supported) else ""
+            self.set_font(self.font_family_name, style, size)
+        else:
+            style = "B" if bold else ""
+            self.set_font("Arial", style, size)
+
+    def safe_cell(self, w, h=0, txt="", border=0, ln=0, align="", fill=False, link=""):
+        if not self.unicode_font_loaded:
+            txt = ascii_safe(txt)
+        super().cell(w, h, txt, border, ln, align, fill, link)
+
+    def safe_multi_cell(self, w, h, txt="", border=0, align="J", fill=False):
+        if not self.unicode_font_loaded:
+            txt = ascii_safe(txt)
+        super().multi_cell(w, h, txt, border, align, fill)
+
+# -------------------- Add Order Items --------------------
 with st.form("add_form"):
     st.subheader("Add Order Items")
 
     codes = sorted(product_dict.keys())
-    # Rich label for easier search
     labels = [f"{c} — {product_dict[c]['Product Name']} — Rs.{product_dict[c]['Rate']:.2f}" for c in codes]
     label_to_code = {label: code for label, code in zip(labels, codes)}
 
@@ -69,7 +146,7 @@ with st.form("add_form"):
             })
             st.success(f"Added {code_input} — {prod['Product Name']} (Qty {qty_input})")
 
-# --- Display Order Table and Summary ---
+# -------------------- Table + Totals --------------------
 if st.session_state.entries:
     st.subheader("Order Details")
     df = pd.DataFrame(st.session_state.entries)
@@ -77,7 +154,7 @@ if st.session_state.entries:
     display_df = df[["S.No","Product Code","Product Name","Per Case","Qty","Rate","Amount"]]
     st.dataframe(display_df, hide_index=True, use_container_width=True)
 
-    # Delete item control (by S.No)
+    # Delete item
     del_col1, del_col2 = st.columns([2,1])
     if len(display_df) > 0:
         s_no_to_delete = del_col1.selectbox(
@@ -95,13 +172,22 @@ if st.session_state.entries:
 
     # Totals
     sub_total = float(df["Amount"].sum())
+
     discount = st.number_input("Discount (%)", min_value=0.0, max_value=100.0, step=1.0)
-    total = sub_total * (1 - discount/100)
+    discounted_total = sub_total * (1 - discount/100)
+    discount_value = sub_total - discounted_total
+
+    pkg_charges = st.number_input("Package Charges (%)", min_value=0.0, max_value=100.0, step=0.5)
+    pkg_amount = discounted_total * (pkg_charges/100)
+
+    total = discounted_total + pkg_amount
+
     st.markdown(f"**Sub Total:** Rs. {sub_total:.2f}")
-    st.markdown(f"**Discount:** {discount}%")
+    st.markdown(f"**Discount:** {discount:.2f}% → Rs. {discount_value:.2f}")
+    st.markdown(f"**Package Charges:** {pkg_charges:.2f}% → Rs. {pkg_amount:.2f}")
     st.markdown(f"**Total:** Rs. {total:.2f}")
 
-    # --- Generate Bill TXT & PDF ---
+    # -------------------- Generate Bill --------------------
     if st.button("Generate Bill"):
         ts = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
         txt_file = f"bill_{ts}.txt"
@@ -120,13 +206,15 @@ if st.session_state.entries:
                     f"Per Case: {row['Per Case']} Rs. {row['Rate']:.2f} x {row['Qty']} = Rs. {row['Amount']:.2f}\n"
                 )
             f.write(f"\nSub Total: Rs. {sub_total:.2f}\n")
-            f.write(f"Discount: {discount}%\n")
+            f.write(f"Discount: {discount:.2f}%  (-Rs. {discount_value:.2f})\n")
+            f.write(f"Package Charges: {pkg_charges:.2f}%  (+Rs. {pkg_amount:.2f})\n")
             f.write(f"Total: Rs. {total:.2f}\n")
 
         # PDF bill
-        pdf = FPDF(orientation='P', unit='mm', format='A4')
+        pdf = PDF(orientation='P', unit='mm', format='A4')
         pdf.add_page()
 
+        # Header image
         if os.path.exists(HEADER_IMG):
             avail_w = pdf.w - 20
             header_h = 40
@@ -136,49 +224,68 @@ if st.session_state.entries:
         else:
             pdf.ln(15)
 
-        pdf.set_font("Arial","B",14)
-        pdf.cell(0,10,"SALES ORDER", ln=True, align='C')
+        # Title
+        pdf.set_u_font(size=14, bold=True)     # real bold if bold TTF found
+        pdf.safe_cell(0, 10, "SALES ORDER", ln=True, align='C')
         pdf.ln(3)
 
-        pdf.set_font("Arial",size=10)
-        pdf.cell(0,6,f"Customer: {customer_name} | {customer_mobile}", ln=True)
-        pdf.multi_cell(0,6, f"Address: {customer_address}")
+        # Customer info
+        pdf.set_u_font(size=10, bold=False)
+        pdf.safe_cell(0, 6, f"Customer: {customer_name} | {customer_mobile}", ln=True)
+        pdf.safe_multi_cell(0, 6, f"Address: {customer_address}")
         pdf.ln(5)
 
-        pdf.set_font("Arial","B",10)
-        col_w = [12,30,60,25,15,20,25]
+        # Table header
+        pdf.set_u_font(size=10, bold=True)
+        col_w = [12,30,60,25,15,20,25]  # S.No, Code, Name, PerCase, Qty, Rate, Amount
         headers = ["S.No","Code","Name","Per Case","Qty","Rate","Amount"]
         for w, h in zip(col_w, headers):
-            pdf.cell(w,7,h,1,0,'C')
+            pdf.safe_cell(w,7,h,1,0,'C')
         pdf.ln()
 
-        pdf.set_font("Arial",size=10)
+        # Table rows
+        pdf.set_u_font(size=10, bold=False)
         for _, row in df.iterrows():
-            pdf.cell(col_w[0],6,str(row['S.No']),1)
-            pdf.cell(col_w[1],6,row['Product Code'],1)
-            name = row['Product Name']
-            if len(name) > 28:  # truncate long names for layout
-                name = name[:27] + "…"
-            pdf.cell(col_w[2],6,name,1)
-            pdf.cell(col_w[3],6,str(row['Per Case']),1,0,'R')
-            pdf.cell(col_w[4],6,str(row['Qty']),1,0,'R')
-            pdf.cell(col_w[5],6,f"{row['Rate']:.2f}",1,0,'R')
-            pdf.cell(col_w[6],6,f"{row['Amount']:.2f}",1,0,'R')
+            name = str(row['Product Name'])
+            if len(name) > 28:
+                name = name[:27] + "..."
+            pdf.safe_cell(col_w[0],6,str(row['S.No']),1)
+            pdf.safe_cell(col_w[1],6,str(row['Product Code']),1)
+            pdf.safe_cell(col_w[2],6,name,1)
+            pdf.safe_cell(col_w[3],6,str(row['Per Case']),1,0,'R')
+            pdf.safe_cell(col_w[4],6,str(row['Qty']),1,0,'R')
+            pdf.safe_cell(col_w[5],6,f"{row['Rate']:.2f}",1,0,'R')
+            pdf.safe_cell(col_w[6],6,f"{row['Amount']:.2f}",1,0,'R')
             pdf.ln()
 
+        # -------- Summary EXACTLY under the last two table columns --------
+        line_h = 6
+        gap_y  = 3
+        rows   = 4  # Sub Total, Discount, Package Charges, Total
+
+        # X where the last two columns start (after first 5 columns)
+        x_start_last_two = pdf.l_margin + sum(col_w[:5])
+
+        def ensure_space_for(rows_needed):
+            needed = rows_needed * line_h + gap_y + 2
+            if pdf.get_y() + needed > (pdf.h - pdf.b_margin):
+                pdf.add_page()
+
+        def summary_row(label: str, value: str):
+            pdf.set_xy(x_start_last_two, pdf.get_y())
+            pdf.safe_cell(col_w[5], line_h, label, 1, 0, 'R')  # aligns with "Rate" column
+            pdf.safe_cell(col_w[6], line_h, value, 1, 1, 'R')  # aligns with "Amount" column
+
         pdf.ln(2)
-        for w in col_w[:5]: pdf.cell(w,6,'',0)
-        pdf.cell(col_w[5],6,"Sub Total",1,0,'R')
-        pdf.cell(col_w[6],6,f"Rs. {sub_total:.2f}",1,1,'R')
+        ensure_space_for(rows)
+        pdf.ln(gap_y)
 
-        for w in col_w[:5]: pdf.cell(w,6,'',0)
-        pdf.cell(col_w[5],6,"Discount",1,0,'R')
-        pdf.cell(col_w[6],6,f"{discount}%",1,1,'R')
+        summary_row("Sub Total",       f"Rs. {sub_total:.2f}")
+        summary_row("Discount",        f"{discount:.2f}% (−Rs. {discount_value:.2f})")
+        summary_row("Package Charges", f"{pkg_charges:.2f}% (+Rs. {pkg_amount:.2f})")
+        summary_row("Total",           f"Rs. {total:.2f}")
 
-        for w in col_w[:5]: pdf.cell(w,6,'',0)
-        pdf.cell(col_w[5],6,"Total",1,0,'R')
-        pdf.cell(col_w[6],6,f"Rs. {total:.2f}",1,1,'R')
-
+        # Output files
         pdf.output(pdf_file)
         with open(txt_file,'rb') as tf:
             st.download_button("⬇️ Download Text Bill", tf, txt_file)

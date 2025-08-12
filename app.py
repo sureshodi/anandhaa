@@ -4,6 +4,8 @@ from fpdf import FPDF
 import datetime
 import os
 import unicodedata
+import json
+from io import StringIO, BytesIO
 
 # -------------------- Constants --------------------
 HEADER_IMG = "header.png"            # optional
@@ -15,11 +17,54 @@ if os.path.exists(HEADER_IMG):
 else:
     st.title("Anandhaa Crackers Wholesale Billing")
 
+# -------------------- Session State Defaults --------------------
+if "entries" not in st.session_state:
+    st.session_state.entries = []
+if "customer_name" not in st.session_state:
+    st.session_state.customer_name = ""
+if "customer_mobile" not in st.session_state:
+    st.session_state.customer_mobile = ""
+if "customer_address" not in st.session_state:
+    st.session_state.customer_address = ""
+if "discount" not in st.session_state:
+    st.session_state.discount = 0.0
+if "pkg_charges" not in st.session_state:
+    st.session_state.pkg_charges = 0.0
+
+# -------------------- Sidebar: Load an existing bill (.json) --------------------
+st.sidebar.subheader("Load Existing Bill")
+uploaded_json = st.sidebar.file_uploader("Upload bill JSON to edit", type=["json"])
+if uploaded_json is not None:
+    try:
+        data = json.load(uploaded_json)
+        st.session_state.customer_name   = data.get("customer_name", "")
+        st.session_state.customer_mobile = data.get("customer_mobile", "")
+        st.session_state.customer_address= data.get("customer_address", "")
+        st.session_state.discount        = float(data.get("discount", 0.0))
+        st.session_state.pkg_charges     = float(data.get("package_charges", 0.0))
+        # entries as list of dicts
+        entries = data.get("entries", [])
+        # Safety: only keep required fields
+        cleaned = []
+        for r in entries:
+            cleaned.append({
+                "Product Code": str(r.get("Product Code","")).strip().upper(),
+                "Product Name": str(r.get("Product Name","")),
+                "Per Case": r.get("Per Case",""),
+                "Qty": int(r.get("Qty", 1)),
+                "Rate": float(r.get("Rate", 0.0)),
+                "Amount": float(r.get("Rate", 0.0)) * int(r.get("Qty", 1)),
+            })
+        st.session_state.entries = cleaned
+        st.sidebar.success("Bill loaded. You can edit and re-generate.")
+    except Exception as e:
+        st.sidebar.error(f"Invalid JSON: {e}")
+
 # -------------------- Customer Details --------------------
 st.subheader("Customer Details")
-customer_name = st.text_input("Customer Name")
-customer_mobile = st.text_input("Customer Mobile")
-customer_address = st.text_area("Customer Address")
+customer_name = st.text_input("Customer Name", value=st.session_state.customer_name, key="customer_name")
+customer_mobile = st.text_input("Customer Mobile", value=st.session_state.customer_mobile, key="customer_mobile")
+customer_address = st.text_area("Customer Address", value=st.session_state.customer_address, key="customer_address")
 
 # -------------------- Load Products --------------------
 @st.cache_data
@@ -37,10 +82,6 @@ def load_products():
     return d
 
 product_dict = load_products()
-
-# -------------------- Session State --------------------
-if "entries" not in st.session_state:
-    st.session_state.entries = []
 
 # -------------------- FPDF Unicode Helpers --------------------
 def ascii_safe(text: str) -> str:
@@ -173,18 +214,18 @@ if st.session_state.entries:
     # Totals
     sub_total = float(df["Amount"].sum())
 
-    discount = st.number_input("Discount (%)", min_value=0.0, max_value=100.0, step=1.0)
-    discounted_total = sub_total * (1 - discount/100)
+    st.session_state.discount = st.number_input("Discount (%)", min_value=0.0, max_value=100.0, step=1.0, value=st.session_state.discount)
+    discounted_total = sub_total * (1 - st.session_state.discount/100)
     discount_value = sub_total - discounted_total
 
-    pkg_charges = st.number_input("Package Charges (%)", min_value=0.0, max_value=100.0, step=0.5)
-    pkg_amount = discounted_total * (pkg_charges/100)
+    st.session_state.pkg_charges = st.number_input("Package Charges (%)", min_value=0.0, max_value=100.0, step=0.5, value=st.session_state.pkg_charges)
+    pkg_amount = discounted_total * (st.session_state.pkg_charges/100)
 
     total = discounted_total + pkg_amount
 
     st.markdown(f"**Sub Total:** Rs. {sub_total:.2f}")
-    st.markdown(f"**Discount:** {discount:.2f}% → Rs. {discount_value:.2f}")
-    st.markdown(f"**Package Charges:** {pkg_charges:.2f}% → Rs. {pkg_amount:.2f}")
+    st.markdown(f"**Discount:** {st.session_state.discount:.2f}% -> Rs. {discount_value:.2f}")
+    st.markdown(f"**Package Charges (Pack Chg):** {st.session_state.pkg_charges:.2f}% -> Rs. {pkg_amount:.2f}")
     st.markdown(f"**Total:** Rs. {total:.2f}")
 
     # -------------------- Generate Bill --------------------
@@ -192,6 +233,7 @@ if st.session_state.entries:
         ts = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
         txt_file = f"bill_{ts}.txt"
         pdf_file = f"bill_{ts}.pdf"
+        json_file = f"bill_{ts}.json"
 
         # Text bill
         with open(txt_file, "w", encoding="utf-8") as f:
@@ -206,9 +248,25 @@ if st.session_state.entries:
                     f"Per Case: {row['Per Case']} Rs. {row['Rate']:.2f} x {row['Qty']} = Rs. {row['Amount']:.2f}\n"
                 )
             f.write(f"\nSub Total: Rs. {sub_total:.2f}\n")
-            f.write(f"Discount: {discount:.2f}%  (-Rs. {discount_value:.2f})\n")
-            f.write(f"Package Charges: {pkg_charges:.2f}%  (+Rs. {pkg_amount:.2f})\n")
+            f.write(f"Discount: {st.session_state.discount:.2f}%  (-Rs. {discount_value:.2f})\n")
+            f.write(f"Package Charges: {st.session_state.pkg_charges:.2f}%  (+Rs. {pkg_amount:.2f})\n")
             f.write(f"Total: Rs. {total:.2f}\n")
+
+        # JSON bill (for reloading/editing)
+        bill_payload = {
+            "generated_at": ts,
+            "customer_name": customer_name,
+            "customer_mobile": customer_mobile,
+            "customer_address": customer_address,
+            "discount": st.session_state.discount,
+            "package_charges": st.session_state.pkg_charges,
+            "sub_total": sub_total,
+            "discount_value": discount_value,
+            "package_amount": pkg_amount,
+            "total": total,
+            "entries": st.session_state.entries,
+        }
+        json_bytes = json.dumps(bill_payload, ensure_ascii=False, indent=2).encode("utf-8")
 
         # PDF bill
         pdf = PDF(orientation='P', unit='mm', format='A4')
@@ -225,7 +283,7 @@ if st.session_state.entries:
             pdf.ln(15)
 
         # Title
-        pdf.set_u_font(size=14, bold=True)     # real bold if bold TTF found
+        pdf.set_u_font(size=14, bold=True)
         pdf.safe_cell(0, 10, "SALES ORDER", ln=True, align='C')
         pdf.ln(3)
 
@@ -262,8 +320,6 @@ if st.session_state.entries:
         line_h = 6
         gap_y  = 3
         rows   = 4  # Sub Total, Discount, Package Charges, Total
-
-        # X where the last two columns start (after first 5 columns)
         x_start_last_two = pdf.l_margin + sum(col_w[:5])
 
         def ensure_space_for(rows_needed):
@@ -280,19 +336,21 @@ if st.session_state.entries:
         ensure_space_for(rows)
         pdf.ln(gap_y)
 
-        summary_row("Sub Total",       f"Rs. {sub_total:.2f}")
-        summary_row("Discount",        f"{discount:.2f}% (−Rs. {discount_value:.2f})")
-        summary_row("Package Charges", f"{pkg_charges:.2f}% (+Rs. {pkg_amount:.2f})")
-        summary_row("Total",           f"Rs. {total:.2f}")
+        summary_row("Sub Total",  f"Rs. {sub_total:.2f}")
+        summary_row("DISCOUNT",   f"{st.session_state.discount:.2f}% -> Rs. {discount_value:.2f}")
+        summary_row("PACK CHG",   f"{st.session_state.pkg_charges:.2f}% -> Rs. {pkg_amount:.2f}")
+        summary_row("Total",      f"Rs. {total:.2f}")
 
-        # Output files
+        # Output files (write local & also provide downloads)
         pdf.output(pdf_file)
+
         with open(txt_file,'rb') as tf:
             st.download_button("⬇️ Download Text Bill", tf, txt_file)
         with open(pdf_file,'rb') as pf:
             st.download_button("⬇️ Download PDF Bill", pf, pdf_file)
+        st.download_button("⬇️ Download JSON (for editing later)", data=json_bytes, file_name=json_file, mime="application/json")
 
-        st.success(f"Invoice generated: {txt_file}, {pdf_file}")
-        st.session_state.entries = []
+        st.success(f"Invoice generated: {txt_file}, {pdf_file}, {json_file}")
+        # Do NOT clear entries automatically; you might want to keep editing.
 else:
     st.info("Add at least one item to generate a bill.")
